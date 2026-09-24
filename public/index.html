@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simple Quiz</title>
+<style>
+  :root { --bg: #e8efe9; --board: #1f4d3a; --chalk: #f6f3ea; --wood: #8b5a2b; --ink: #17261f;
+          --A: #e2493f; --B: #2d7dd2; --C: #e6a817; --D: #3aa15a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 22px 16px 48px; }
+  h1 { font: 700 34px/1.1 "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive; margin: 0 0 2px; }
+  .sub { margin: 0 0 10px; color: #4d6157; }
+  #status { font-size: 13px; color: #4d6157; margin: 0 0 12px; } #status.ok { color: #1c7a4a; } #status.err { color: #b3261e; }
+  .board { background: var(--board); color: var(--chalk); border: 10px solid var(--wood); border-radius: 12px; padding: 22px; box-shadow: 0 6px 0 rgba(0,0,0,.18); }
+  .board h2 { font: 700 26px/1.2 "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive; margin: 0 0 12px; }
+  .hidden { display: none; }
+  button { font: inherit; font-weight: 700; padding: 10px 18px; border: 2px solid var(--chalk); border-radius: 10px; background: transparent; color: var(--chalk); cursor: pointer; }
+  button.main { background: var(--chalk); color: var(--board); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid #ffd54a; outline-offset: 2px; }
+  input, textarea, select { width: 100%; font: inherit; padding: 9px 12px; border: 2px solid var(--chalk); border-radius: 10px; background: #fff; color: var(--ink); }
+  textarea { min-height: 120px; resize: vertical; }
+  .tabs { display: flex; gap: 6px; margin: 12px 0 8px; } .tabs button { flex: 1; padding: 7px; } .tabs button.on { background: var(--chalk); color: var(--board); }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; } .row label { font-weight: 600; }
+  .row select { width: auto; } hr { border: 0; border-top: 2px dashed rgba(246,243,234,.35); margin: 18px 0; }
+  .saved { display: flex; gap: 8px; margin: 6px 0; } .saved .name { flex: 1; text-align: left; } .saved .x { padding: 6px 12px; }
+  .prog { height: 10px; background: rgba(255,255,255,.2); border-radius: 99px; overflow: hidden; margin: 6px 0 14px; } .prog div { height: 100%; background: #ffd54a; width: 0; transition: width .3s; }
+  .count { font-weight: 700; opacity: .85; } #qText { font: 700 24px/1.35 Georgia, serif; margin: 6px 0 16px; }
+  .ans { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; margin-bottom: 10px; border: 0; color: #fff; padding: 12px 14px; font-size: 17px; }
+  .ans i { font-style: normal; background: rgba(0,0,0,.25); border-radius: 8px; min-width: 32px; height: 32px; display: grid; place-items: center; }
+  .ans[data-k="0"] { background: var(--A); } .ans[data-k="1"] { background: var(--B); }
+  .ans[data-k="2"] { background: var(--C); color: #2a2100; } .ans[data-k="3"] { background: var(--D); }
+  .ans.dim { opacity: .3; } .ans.right { outline: 4px solid #fff; } .ans.wrong { outline: 4px dashed #fff; opacity: .6; }
+  #feedback { margin: 10px 0; min-height: 26px; } #feedback b { font-size: 18px; }
+  .score { font: 700 54px/1.1 Georgia, serif; margin: 6px 0; } .missed { background: rgba(0,0,0,.2); border-radius: 10px; padding: 10px 14px; margin: 8px 0; font-size: 15px; }
+  .err { color: #ffd0cc; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Simple Quiz</h1>
+  <p class="sub">Multiple-choice questions. Let the AI write new ones from your notes.</p>
+  <p id="status">Checking the AI question writer...</p>
+
+  <div class="board">
+    <!-- HOME -->
+    <section id="home">
+      <h2>Pick a quiz</h2>
+      <button class="main" id="starterBtn">Play the starter quiz</button>
+      <div id="savedBox" class="hidden"><hr><strong>Your saved quizzes</strong><div id="saved"></div></div>
+      <hr>
+      <strong>Make a new quiz with AI</strong>
+      <div class="tabs"><button id="tNotes" class="on">From my notes</button><button id="tTopic">From a topic</button></div>
+      <textarea id="notes" placeholder="Paste your notes here, for example a paragraph from your textbook..."></textarea>
+      <input id="topic" class="hidden" placeholder="For example: the water cycle" maxlength="120">
+      <div class="row"><label for="count">Questions</label>
+        <select id="count"><option>3</option><option selected>5</option><option>8</option></select>
+        <button class="main" id="makeBtn" disabled>Make my quiz</button></div>
+      <p id="homeMsg" class="err"></p>
+    </section>
+
+    <!-- LOADING -->
+    <section id="loading" class="hidden">
+      <h2>Writing your quiz...</h2><p id="loadMsg"></p>
+      <div class="prog"><div id="loadBar"></div></div><p>The AI runs on your device, so this takes a little while.</p>
+      <button id="cancelBtn">Cancel</button>
+    </section>
+
+    <!-- QUESTION -->
+    <section id="play" class="hidden">
+      <div class="count" id="qCount"></div><div class="prog"><div id="qBar"></div></div>
+      <div id="qText"></div><div id="answers"></div>
+      <div id="feedback" aria-live="polite"></div>
+      <button class="main hidden" id="nextBtn">Next</button>
+    </section>
+
+    <!-- RESULT -->
+    <section id="result" class="hidden">
+      <h2>Quiz complete!</h2><div class="score" id="score"></div><p id="msg"></p>
+      <div id="missed"></div>
+      <div class="row"><button class="main" id="againBtn">Play again</button><button id="homeBtn">Back to quizzes</button></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const STARTER = { title: "Starter quiz", questions: [
+  { question: "Which planet is known as the Red Planet?", options: ["Venus", "Mars", "Jupiter", "Mercury"], answerIndex: 1, explanation: "Iron oxide (rust) on its surface makes Mars look red." },
+  { question: "How many continents are there on Earth?", options: ["5", "6", "7", "8"], answerIndex: 2, explanation: "Africa, Antarctica, Asia, Australia, Europe, North America and South America." },
+  { question: "Which gas do plants take in for photosynthesis?", options: ["Oxygen", "Nitrogen", "Hydrogen", "Carbon dioxide"], answerIndex: 3, explanation: "Plants use carbon dioxide, water and sunlight to make food." },
+  { question: "What is the capital city of Japan?", options: ["Tokyo", "Kyoto", "Osaka", "Nagoya"], answerIndex: 0, explanation: "Tokyo has been Japan's capital since 1868." },
+  { question: "What is 9 x 7?", options: ["54", "56", "63", "72"], answerIndex: 2, explanation: "9 x 7 = 63." } ] };
+
+let saved = []; try { saved = JSON.parse(localStorage.getItem("quizzes") || "[]"); } catch {}
+const persist = () => { try { localStorage.setItem("quizzes", JSON.stringify(saved)); } catch {} };
+let quiz = null, idx = 0, score = 0, answered = false, missed = [], aiReady = false, cancelled = false, tab = "notes";
+
+function screen(name) { ["home", "loading", "play", "result"].forEach((s) => $(s).classList.toggle("hidden", s !== name)); }
+
+// ---------- Home ----------
+function renderSaved() {
+  $("savedBox").classList.toggle("hidden", !saved.length); const box = $("saved"); box.innerHTML = "";
+  saved.forEach((q) => {
+    const row = document.createElement("div"); row.className = "saved";
+    const play = document.createElement("button"); play.className = "name"; play.textContent = q.title + " (" + q.questions.length + " questions)"; play.onclick = () => start(q);
+    const del = document.createElement("button"); del.className = "x"; del.textContent = "Delete"; del.setAttribute("aria-label", "Delete " + q.title);
+    del.onclick = () => { saved = saved.filter((x) => x !== q); persist(); renderSaved(); };
+    row.append(play, del); box.append(row);
+  });
+}
+$("starterBtn").onclick = () => start(STARTER);
+$("tNotes").onclick = () => setTab("notes"); $("tTopic").onclick = () => setTab("topic");
+function setTab(t) { tab = t; $("tNotes").classList.toggle("on", t === "notes"); $("tTopic").classList.toggle("on", t === "topic"); $("notes").classList.toggle("hidden", t !== "notes"); $("topic").classList.toggle("hidden", t !== "topic"); }
+
+// ---------- Make a quiz with the AI (QVAC on your machine) ----------
+$("makeBtn").onclick = async () => {
+  const text = (tab === "notes" ? $("notes").value : $("topic").value).trim();
+  if (!text) { $("homeMsg").textContent = tab === "notes" ? "Paste some notes first." : "Type a topic first."; return; }
+  $("homeMsg").textContent = ""; cancelled = false; screen("loading");
+  const total = +$("count").value, questions = [];
+  for (let i = 0; i < total && !cancelled; i++) {
+    $("loadMsg").textContent = "Question " + (i + 1) + " of " + total; $("loadBar").style.width = (i / total) * 100 + "%";
+    try {
+      const res = await fetch("/api/question", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source: tab, text, previous: questions.map((q) => q.question) }) });
+      if (!res.ok) throw new Error((await res.json()).error);
+      questions.push(await res.json());
+    } catch (err) { if (questions.length < 2) { $("homeMsg").textContent = "Couldn't make a quiz: " + err.message; screen("home"); return; } break; }
+  }
+  if (cancelled) return screen("home");
+  const title = tab === "topic" ? text : text.slice(0, 32).trim() + (text.length > 32 ? "..." : "");
+  const q = { title, questions }; saved.unshift(q); saved = saved.slice(0, 10); persist(); renderSaved(); start(q);
+};
+$("cancelBtn").onclick = () => { cancelled = true; };
+
+// ---------- Play ----------
+function start(q) { quiz = q; idx = 0; score = 0; missed = []; show(); }
+function show() {
+  const q = quiz.questions[idx]; answered = false; screen("play");
+  $("qCount").textContent = "Question " + (idx + 1) + " of " + quiz.questions.length; $("qBar").style.width = (idx / quiz.questions.length) * 100 + "%";
+  $("qText").textContent = q.question; $("feedback").textContent = ""; $("nextBtn").classList.add("hidden");
+  const box = $("answers"); box.innerHTML = "";
+  q.options.forEach((opt, k) => {
+    const b = document.createElement("button"); b.className = "ans"; b.dataset.k = k;
+    const l = document.createElement("i"); l.textContent = "ABCD"[k]; const t = document.createElement("span"); t.textContent = opt;
+    b.append(l, t); b.onclick = () => choose(k); box.append(b);
+  });
+}
+function choose(k) {
+  if (answered) return; answered = true;
+  const q = quiz.questions[idx], right = k === q.answerIndex; if (right) score++; else missed.push(q);
+  document.querySelectorAll(".ans").forEach((b, i) => { b.disabled = true; b.classList.add(i === q.answerIndex ? "right" : i === k ? "wrong" : "dim"); });
+  const fb = $("feedback"); fb.innerHTML = ""; const h = document.createElement("b");
+  h.textContent = right ? "Correct!" : "Not quite. The answer is " + "ABCD"[q.answerIndex] + ".";
+  fb.append(h); if (q.explanation) fb.append(" " + q.explanation);
+  $("nextBtn").textContent = idx === quiz.questions.length - 1 ? "See my score" : "Next"; $("nextBtn").classList.remove("hidden"); $("nextBtn").focus();
+}
+$("nextBtn").onclick = () => { if (idx < quiz.questions.length - 1) { idx++; show(); } else finish(); };
+document.addEventListener("keydown", (e) => {
+  if ($("play").classList.contains("hidden") || answered || e.ctrlKey || e.metaKey) return;
+  const k = "abcd".indexOf(e.key.toLowerCase()); const n = "1234".indexOf(e.key); const pick = k >= 0 ? k : n;
+  if (pick >= 0 && pick < quiz.questions[idx].options.length) choose(pick);
+});
+
+// ---------- Result ----------
+function finish() {
+  screen("result"); const n = quiz.questions.length;
+  $("score").textContent = score + " / " + n;
+  $("msg").textContent = score === n ? "Perfect score! Amazing." : score >= n * 0.7 ? "Great job!" : score >= n * 0.4 ? "Good effort. Try again to improve." : "Keep practicing. You'll get there!";
+  const box = $("missed"); box.innerHTML = "";
+  if (missed.length) { const h = document.createElement("strong"); h.textContent = "Review these:"; box.append(h); }
+  missed.forEach((q) => { const d = document.createElement("div"); d.className = "missed"; d.textContent = q.question + "  Answer: " + q.options[q.answerIndex]; box.append(d); });
+}
+$("againBtn").onclick = () => start(quiz); $("homeBtn").onclick = () => screen("home");
+
+// ---------- AI status ----------
+async function checkStatus() {
+  try {
+    const s = await (await fetch("/api/status")).json();
+    if (s.error) return setStatus("AI error: " + s.error + ". The starter quiz still works.", "err");
+    if (s.ready) { aiReady = true; $("makeBtn").disabled = false; return setStatus("AI question writer ready. It runs on your device.", "ok"); }
+    setStatus(s.message + (s.percent != null ? " " + s.percent + "%" : "") + " The starter quiz works meanwhile.");
+  } catch { setStatus("Can't reach the server. Is it running?", "err"); }
+  setTimeout(checkStatus, 1500);
+}
+function setStatus(t, c = "") { $("status").textContent = t; $("status").className = c; }
+
+renderSaved(); checkStatus();
+</script>
+</body>
+</html>
